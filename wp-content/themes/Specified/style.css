@@ -1,0 +1,21 @@
+/*
+Theme Name: Respondiv 
+Description: Child theme for Avada theme
+Author: Sushil Prasai
+Author URI: https://respondiv.com
+Template: Avada
+Version: 1.0.0
+Text Domain:  Respondiv
+*/
+
+.fusion-column-wrapper p{
+	margin-top: 25px;
+}
+
+.page-id-103 .fusion-imageframe.element-bottomshadow img{
+	width: 180px;
+}
+
+.fusion-page-title-bar{
+	background-image:url('http://specified.ca/wp-content/themes/Avada/images/page_title_bg.png') !important;
+}
