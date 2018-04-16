@@ -23,7 +23,7 @@ function layerslider_activation_redirect() {
 	if(get_option('layerslider_do_activation_redirect', false)) {
 		delete_option('layerslider_do_activation_redirect');
 		if(isset($_GET['activate']) && !isset($_GET['activate-multi'])) {
-			wp_redirect(admin_url('admin.php?page=ls-about'));
+			wp_redirect( admin_url( 'admin.php?page=layerslider-options&section=about' ) );
 		}
 	}
 }
@@ -76,9 +76,21 @@ function layerslider_activation_routine( ) {
 
 function layerslider_update_scripts() {
 
-	// Update database
+	// Make sure database is up-to-date,
+	// perform any changes that might be
+	// required by an update.
 	layerslider_activation_routine();
 
+	// Make sure to empty all caches due
+	// to any potential data handling changes
+	// introduced in an update.
+	if( function_exists('layerslider_delete_caches') ) {
+		layerslider_delete_caches();
+	}
+
+	// Trigger 'layerslider_updated' action
+	// hook, so 3rd parties can run their own
+	// updates scripts (if any).
 	if(has_action('layerslider_updated')) {
 		do_action('layerslider_updated');
 	}

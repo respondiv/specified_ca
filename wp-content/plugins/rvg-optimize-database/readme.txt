@@ -3,13 +3,13 @@ Contributors: CAGE Web Design | Rolf van Gelder
 Donate link: http://cagewebdev.com/donations-odb/
 Plugin Name: Optimize Database after Deleting Revisions
 Plugin URI: http://cagewebdev.com/optimize-database-after-deleting-revisions-wordpress-plugin
-Tags: database, delete, revisions, optimize, post, posts, page, pages, clean, clean up, trash, spam, trashed, spammed, database size, scheduler, transients, unused tags, pingback, trackback, unix cron tab, crontab, multisite
+Tags: database, delete, revisions, optimize, post, posts, page, pages, clean, clean up, trash, spam, trashed, spammed, database size, scheduler, transients, unused tags, pingback, trackback, unix cron tab, crontab, multisite, custom post types, oembed
 Author URI: http://cagewebdev.com
 Author: CAGE Web Design | Rolf van Gelder, Eindhoven, The Netherlands
 Requires at least: 2.8
-Tested up to: 4.8
-Stable tag: 4.3
-Version: 4.3
+Tested up to: 4.9.4
+Stable tag: 4.5.2
+Version: 4.5.2
 License: GPLv2 or later
 
 == Description ==
@@ -17,12 +17,13 @@ License: GPLv2 or later
 This plugin is a 'One Click' WordPress Database Cleaner / Optimizer.
 
 = Main Features =
-* Deletes redundant revisions of posts and pages (you optionally can keep an 'x'-amount of the most recent revisions)
+* Deletes revisions of posts, pages and / or custom post types (you optionally can keep an 'x'-amount of the most recent revisions and you can choose to delete revisions older than...)
 * Deletes trashed posts, pages and comments (optional)
 * Deletes spammed comments (optional)
 * Deletes unused tags (optional)
-* Deletes 'expired transients' (optional)
+* Deletes 'expired or all transients' (optional)
 * Deletes 'pingbacks' and 'trackbacks' (optional)
+* Clears the 'OEMBED cache' (optional)
 * Deletes 'orphan postmeta items'
 * Optimizes the database tables (optionally you can exclude certain tables, or even specific posts/pages, from optimization)
 * Creates a log file of the optimizations (optional)
@@ -61,6 +62,7 @@ Then, start the .php file from your crontab!<br>
 * Danish [da_DK] - translated by Alexander Leo-Hansen - http://alexanderleohansen.dk
 * Dutch [nl_NL] - translated by Rolf van Gelder, CAGE Web Design - http://cagewebdev.com
 * English [en_US] - translated by Rolf van Gelder, CAGE Web Design - http://cagewebdev.com
+* French [fr_FR] - translated by Guillaume Blet - http://www.mycinetheque.fr
 * German [de_DE] - translated by the.mnbvcx
 * Indonesian [id_ID] - translated by ChameleonJohn.com
 * Italian [it_IT] - translated by Fabio Marzocca
@@ -102,6 +104,37 @@ http://cagewebdev.com/wordpress-plugins/
 * If you run the plugin from any of the sites, it will cleanup ALL the sites in the network!
 
 == Changelog ==
+= 4.5.2 [03/21/2018] =
+* NEW: Clear oEmbed cache (optional)
+* BUG FIX: Translation corrected ('Next scheduled run: 0 days, 9 hours, 35 minutes and 27 seconds')
+
+= 4.5.1 [01/29/2018] =
+* NEW: Added last run seconds
+* NEW: French translation added
+* BUG FIX: Fixed a typo ('DELETEED')
+
+= 4.5 [01/08/2018] =
+* CHANGE: Revamped and improved the scheduler code
+
+= 4.4.3 [01/06/2018] =
+* BUG FIX: Fixed some scheduler time issues
+
+= 4.4.2 [12/14/2017] =
+* NEW: Skip standard posttype 'oembed_cache'
+* BUG FIX: Hide the settings link (plugin page) for multi site sites (except for the main network site)
+
+= 4.4.1 [11/06/2017] =
+* BUG FIX: Bug in counting excluded tables fixed
+
+= 4.4 [08/22/2017] =
+* NEW: New options to delete revisions of posts, pages and / or specific custom post types
+
+= 4.3.2 [08/12/2017] =
+* CHANGE: Fixed some (innocent) PHP warnings
+
+= 4.3.1 [08/10/2017] =
+* NEW: New option for deleting ALL transients (not the expired ones only)
+
 = 4.3 [07/24/2017] =
 * NEW: New setting added: Delete revisions of (POSTS and PAGES, POSTS only or PAGES only)
 * CHANGE: Some code clean-up and minor changes
@@ -113,7 +146,7 @@ http://cagewebdev.com/wordpress-plugins/
 * NEW: Indonesian (id_ID) translation added
 
 = 4.2.1 [09/23/2016] =
-* CHANGE: fixed some (innocent) warnings
+* CHANGE: Fixed some (innocent) warnings
 
 = 4.2.0 [09/16/2016] =
 * NEW: Added a 'monthly' schedule to the scheduler
@@ -440,3 +473,9 @@ InnoDB focuses on speed optimization and sometimes it means the database can gro
 
 = I scheduled the optimization for 8pm but it runs at 6pm (my local time) =
 * The scheduler uses the local time of the web server which can differ from your own local time
+
+= The plugin is visible in Main Site Tools but not in my subsites =
+* Multisite Support
+– Install the plugin as Network Administrator (Network Admin » Plugins)
+– ‘Network Activate’ the plugin
+– You only can configure and run the plugin on the main network site, but it will optimize ALL the sub-sites too!

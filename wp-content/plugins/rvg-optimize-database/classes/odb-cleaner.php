@@ -40,13 +40,15 @@ class ODB_Cleaner {
 	
 		// TIMESTAMP FOR LOG FILE
 		$ct = ($scheduler) ? ' (cron)' : '';
-		$current_datetime = Date('m/d/YH:i:s');
+		// v4.5
+		$current_datetime = current_time('m/d/YH:i:s', 0);
 		$odb_class->log_arr = array("time" => substr($current_datetime, 0, 10).'<br>'.substr($current_datetime,10).$ct);
 
 		$odb_class->log_arr["after"]      = 0;
 		$odb_class->log_arr["before"]     = 0;
 		$odb_class->log_arr["orphans"]    = 0;
 		$odb_class->log_arr["pingbacks"]  = 0;
+		$odb_class->log_arr["oembed"]     = 0;
 		$odb_class->log_arr["revisions"]  = 0;
 		$odb_class->log_arr["savings"]    = 0;
 		$odb_class->log_arr["spam"]       = 0;
@@ -188,7 +190,7 @@ class ODB_Cleaner {
 	<table border="0" cellspacing="8" cellpadding="2" class="odb-result-table">
 	  <tr>
 		<td colspan="4"><div class="odb-found">
-			<?php _e('DELETEED SPAMMED ITEMS', $odb_class->odb_txt_domain);?>
+			<?php _e('DELETED SPAMMED ITEMS', $odb_class->odb_txt_domain);?>
 		  </div></td>
 	  </tr>
 	  <tr>
@@ -260,22 +262,32 @@ class ODB_Cleaner {
 		/****************************************************************************************
 		 *	DELETE EXPIRED TRANSIENTS
 		 ****************************************************************************************/
-		if($odb_class->odb_rvg_options['clear_transients'] == 'Y') {
+		if($odb_class->odb_rvg_options['clear_transients'] != 'N') {
 			// DELETE UNUSED TAGS
 			$total_deleted = $this->odb_delete_transients();
 			if($total_deleted > 0) {
 				// TRANSIENTS DELETED
 				if (!$scheduler) {
+					if ($odb_class->odb_rvg_options['clear_transients'] == 'Y') {
+						$msg = __('NUMBER OF EXPIRED TRANSIENTS DELETED', $odb_class->odb_txt_domain);
+					} else {
+						$msg = __('NUMBER OF TRANSIENTS DELETED', $odb_class->odb_txt_domain);
+					}
 	?>
 	<div class="odb-found-number">
-	  <?php _e('NUMBER OF EXPIRED TRANSIENTS DELETED', $odb_class->odb_txt_domain);?>: <span class="odb-blue"><?php echo $total_deleted;?></span> </div>
+	  <?php echo $msg; ?>: <span class="odb-blue"><?php echo $total_deleted;?></span> </div>
 	<?php
 				} // if (!$scheduler)
 			} else {
 				if (!$scheduler) {
+					if ($odb_class->odb_rvg_options['clear_transients'] == 'Y') {
+						$msg = __('No EXPIRED TRANSIENTS found to delete', $odb_class->odb_txt_domain);
+					} else {
+						$msg = __('No TRANSIENTS found to delete', $odb_class->odb_txt_domain);
+					}					
 	?>
 	<div class="odb-not-found">
-	  <?php _e('No EXPIRED TRANSIENTS found to delete', $odb_class->odb_txt_domain);?>
+	  <?php echo $msg;?>
 	</div>
 	<?php
 				} // if (!$scheduler)
@@ -283,14 +295,14 @@ class ODB_Cleaner {
 		
 			// NUMBER OF transients DELETED FOR LOG FILE
 			$odb_class->log_arr["transients"] = $total_deleted;			
-		} // if($odb_class->odb_rvg_options['clear_transients'] == 'Y')
+		} // if($odb_class->odb_rvg_options['clear_transients'] != 'N')
 	
 	
 		/****************************************************************************************
 		 *	DELETE PINGBACKS AND TRACKBACKS
 		 ****************************************************************************************/	
 		if($odb_class->odb_rvg_options['clear_pingbacks'] == 'Y') {
-			// DELETE UNUSED TAGS
+			// DELETE PINGBACKS AND TRACKBACKS
 			$total_deleted = $this->odb_delete_pingbacks();
 			if($total_deleted > 0) {
 				// PINGBACKS / TRACKBACKS DELETED\
@@ -313,6 +325,35 @@ class ODB_Cleaner {
 			// NUMBER OF pingbacks / trackbacks DELETED (FOR LOG FILE)
 			$odb_class->log_arr["pingbacks"] = $total_deleted;	
 		} // if($odb_class->odb_rvg_options['clear_pingbacks'] == 'Y')
+
+
+		/****************************************************************************************
+		 *	DELETE OEMBED CACHE
+		 ****************************************************************************************/	
+		if($odb_class->odb_rvg_options['clear_oembed'] == 'Y') {
+			// DELETE OEMBED CACHE
+			$total_deleted = $this->odb_delete_oembed();
+			if($total_deleted > 0) {
+				// OEMBED CACHE CLEARED
+				if (!$scheduler) {
+	?>
+	<div class="odb-found-number">
+	  <?php _e('NUMBER OF oEmbed RECORDS DELETED', $odb_class->odb_txt_domain);?>: <span class="odb-blue"><?php echo $total_deleted;?></span> </div>
+	<?php
+				} // if (!$scheduler)
+			} else {
+				if (!$scheduler) {
+	?>
+	<div class="odb-not-found">
+	  <?php _e('No oEmbed records found to delete', $odb_class->odb_txt_domain);?>
+	</div>
+	<?php
+				} // if (!$scheduler)
+			} // if(count($results)>0)
+		
+			// NUMBER OF OEMBED RECORDS DELETED (FOR LOG FILE)
+			$odb_class->log_arr["oembeds"] = $total_deleted;	
+		} // if($odb_class->odb_rvg_options['clear_oembed'] == 'Y')
 
 	
 		/****************************************************************************************
@@ -468,6 +509,8 @@ class ODB_Cleaner {
 		<br />
 		<span class="odb-padding-left"><?php _e('Optimization took', $odb_class->odb_txt_domain)?>&nbsp;<strong><?php echo $total_time;?></strong>&nbsp;<?php _e('seconds', $odb_class->odb_txt_domain)?>.</span>
 		<?php
+		// v4.5.1
+		$odb_class->odb_last_run_seconds = $total_time;
 		if(file_exists($odb_class->odb_plugin_path.'logs/rvg-optimize-db-log.html'))
 		{
 		?>
@@ -492,15 +535,30 @@ class ODB_Cleaner {
 		global $odb_class, $wpdb;
 		
 		$res_arr = array();
-
-		$rev_post_type = $odb_class->odb_rvg_options['rev_post_type'];
-		$where = "";
-		if ($rev_post_type) $where = "	 AND p2.`post_type` = '" . $rev_post_type . "'";
+		
+		// CUSTOM POST TYPES (from v4.4)
+		$rel_posttypes = $odb_class->odb_rvg_options['post_types'];
+		$in = '';
+		foreach ($rel_posttypes as $posttype => $value) {
+			if ($value == 'Y') {
+				if ($in != '') $in .= ',';
+				$in .= "'" . $posttype . "'";
+			} // if ($value == 'Y')
+		} // foreach($rel_posttypes as $posttypes)
+		
+		$where = '';
+		if($in != '') {
+			$where = " AND p2.`post_type` IN ($in)";
+		} else {
+			// NO POST TYPES TO DELETE REVISIONS FOR... SKIP!
+			return $res_arr;			
+		} // if($in != '')
 
 		$older_than = $odb_class->odb_rvg_options['older_than'];
 
 		$index = 0;
 
+		// LOOP THROUGH THE SITES (IF MULTI SITE)
 		for($i=0; $i<count($odb_class->odb_ms_prefixes); $i++) {
 			
 			$sql = sprintf("
@@ -516,6 +574,8 @@ class ODB_Cleaner {
 			$odb_class->odb_ms_prefixes[$i],
 			$where,
 			$older_than);
+			
+			//echo 'OLDER: '.$sql.'<br>';
 	
 			$res = $wpdb->get_results($sql, ARRAY_A);
 			
@@ -540,10 +600,24 @@ class ODB_Cleaner {
 		global $odb_class, $wpdb;
 		
 		$res_arr = array();
-
-		$rev_post_type = $odb_class->odb_rvg_options['rev_post_type'];
+		
+		// CUSTOM POST TYPES (from v4.4)
+		$rel_posttypes = $odb_class->odb_rvg_options['post_types'];
+		$in = '';
+		foreach ($rel_posttypes as $posttype => $value) {
+			if ($value == 'Y') {
+				if ($in != '') $in .= ',';
+				$in .= "'" . $posttype . "'";
+			} // if ($value == 'Y')
+		} // foreach($rel_posttypes as $posttypes)
+		
 		$where1 = '';
-		if ($rev_post_type) $where1 = "	 AND p2.`post_type` = '" . $rev_post_type . "'";
+		if($in != '') {
+			$where1 = " AND p2.`post_type` IN ($in)";
+		} else {
+			// NO POST TYPES TO DELETE REVISIONS FOR... SKIP!
+			return $res_arr;
+		} // if($in != '')
 				
 		// MAX NUMBER OF REVISIONS TO KEEP
 		$max_revisions = $odb_class->odb_rvg_options['nr_of_revisions'];
@@ -575,6 +649,8 @@ class ODB_Cleaner {
 			$where1,
 			$where2,
 			$max_revisions);
+			
+			//echo 'KEEP: '.$sql.'<br>';
 			
 			$res = $wpdb->get_results($sql, ARRAY_A);
 			for($j=0; $j<count($res); $j++) {
@@ -919,48 +995,73 @@ class ODB_Cleaner {
 
 
 	/********************************************************************************************
-	 *	DELETE EXPIRED TRANSIENTS
+	 *	DELETE TRANSIENTS (v4.3.1)
 	 ********************************************************************************************/
 	function odb_delete_transients() {
 		global $wpdb, $odb_class;
 	
-		$delay = time() - 60;	// ONE MINUTE DELAY
-	
 		$total_deleted = 0;
-	
-		// LOOP THROUGH THE NETWORK
-		for($i=0; $i<count($odb_class->odb_ms_prefixes); $i++) {
-			// FIND EXPIRED TRANSIENTS
-			$sql = "
-			SELECT `option_name`
-			FROM ".$odb_class->odb_ms_prefixes[$i]."options
-			WHERE (
-				option_name LIKE '_transient_timeout_%'
-				OR option_name LIKE '_site_transient_timeout_%'
-			)
-			AND option_value < '".$delay."'
-			";
+
+		if ($odb_class->odb_rvg_options['clear_transients'] == 'Y') {
+			// ONLY DELETE EXPIRED TRANSIENTS
 			
-			$results = $wpdb->get_results($sql);
-			$total_deleted += count($results);
+			$delay = time() - 60;	// ONE MINUTE DELAY
 			
-			// LOOP THROUGH THE RESULTS
-			for($j=0; $j<count($results); $j++) {
-				if(substr($results[$j]->option_name, 0, 19) == '_transient_timeout_') {
-					// _transient_timeout_%
-					$transient = substr($results[$j]->option_name, 19);
-					// DELETE THE TRANSIENT
-					delete_transient($transient);					
-				} else {
-					// _site_transient_timeout_%
-					$transient = substr($results[$j]->option_name, 24);
-					// DELETE THE TRANSIENT
-					delete_site_transient($transient);				
-				} // if(substr($results[$j]->option_name, 0, 19) == '_transient_timeout_')
-			} // for($j=0; $j<count($results); $j++)
-		} // for($i=0; $i<count($odb_class->odb_ms_prefixes); $i++)
+			// LOOP THROUGH THE NETWORK
+			for($i=0; $i<count($odb_class->odb_ms_prefixes); $i++) {
+				// FIND EXPIRED TRANSIENTS
+				$sql = "
+				SELECT `option_name`
+				FROM ".$odb_class->odb_ms_prefixes[$i]."options
+				WHERE (
+					option_name LIKE '_transient_timeout_%'
+					OR option_name LIKE '_site_transient_timeout_%'
+				)
+				AND option_value < '".$delay."'
+				";
+				
+				$results = $wpdb->get_results($sql);
+				$total_deleted += count($results);
+				
+				// LOOP THROUGH THE RESULTS
+				for($j=0; $j<count($results); $j++) {
+					if(substr($results[$j]->option_name, 0, 19) == '_transient_timeout_') {
+						// _transient_timeout_%
+						$transient = substr($results[$j]->option_name, 19);
+						// DELETE THE TRANSIENT
+						delete_transient($transient);					
+					} else {
+						// _site_transient_timeout_%
+						$transient = substr($results[$j]->option_name, 24);
+						// DELETE THE TRANSIENT
+						delete_site_transient($transient);				
+					} // if(substr($results[$j]->option_name, 0, 19) == '_transient_timeout_')
+				} // for($j=0; $j<count($results); $j++)
+			} // for($i=0; $i<count($odb_class->odb_ms_prefixes); $i++)
+		} else {
+			// DELETE ALL TRANSIENTS
+			
+			// LOOP THROUGH THE NETWORK
+			for($i=0; $i<count($odb_class->odb_ms_prefixes); $i++) {
+				// FIND EXPIRED TRANSIENTS
+				$sql = "
+				SELECT `option_name`
+				FROM ".$odb_class->odb_ms_prefixes[$i]."options
+				WHERE option_name LIKE '%_transient_%'
+				";
+				
+				$results = $wpdb->get_results($sql);
+				$total_deleted += count($results);
+				
+				// LOOP THROUGH THE RESULTS
+				for($j=0; $j<count($results); $j++) {
+					delete_option($results[$j]->option_name);	
+				} // for($j=0; $j<count($results); $j++)
+			} // for($i=0; $i<count($odb_class->odb_ms_prefixes); $i++)		
+		} // if ($odb_class->odb_rvg_options['clear_transients'] == 'Y')
 		
 		return $total_deleted;
+
 	} // odb_delete_transients()
 
 
@@ -1009,6 +1110,41 @@ class ODB_Cleaner {
 		return $total_deleted;
 	} // odb_delete_pingbacks()
 
+
+	/********************************************************************************************
+	 *	CLEAR OEMBED CACHE
+	 ********************************************************************************************/
+	function odb_delete_oembed() {
+		global $wpdb, $odb_class;
+		
+		$total_deleted = 0;
+	
+		// LOOP THROUGH THE NETWORK
+		for($i=0; $i<count($odb_class->odb_ms_prefixes); $i++) {
+			
+			//SELECT * FROM `cage2016_postmeta` WHERE `meta_value` LIKE '_OEMBED_%' 
+			// SELECT * FROM `cage2016_postmeta` WHERE `meta_key` LIKE '_oembed_%' 
+			
+			$sql = sprintf ("
+			SELECT `meta_id`
+			FROM %spostmeta
+			WHERE `meta_key` LIKE '_oembed_%%'
+			", $odb_class->odb_ms_prefixes[$i]);
+		
+			$results = $wpdb->get_results($sql);
+			$total_deleted = count($results);
+	
+			// DELETE COMMENTS			
+			$sql_delete_comments = sprintf ("
+			DELETE FROM %spostmeta
+			WHERE `meta_key` LIKE '_oembed_%%'	
+			", $odb_class->odb_ms_prefixes[$i]);
+			$wpdb->get_results($sql_delete_comments);
+		} // for($i=0; $i<count($odb_class->odb_ms_prefixes); $i++)
+	
+		return $total_deleted;
+	} // odb_delete_oembed()
+	
 
 	/********************************************************************************************
 	 *	DELETE ORPHAN POSTMETA AND MEDIA RECORDS

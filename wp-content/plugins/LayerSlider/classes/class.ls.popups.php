@@ -55,6 +55,8 @@ class LS_Popups {
 
 		self::autoinclude();
 		self::display();
+
+		add_action('wp_footer', array(__CLASS__, 'render'), 1);
 	}
 
 
@@ -190,15 +192,19 @@ class LS_Popups {
 				// for the purpose of serving a repeat control.
 				$expires = ( (int)$popup['repeat_days'] === 0 ) ? 0 : time() + 60*60*24*365;
 				setcookie('ls-popup-'.$popup['id'], time(), $expires );
-
-				// Print slider markup
-				add_action('get_footer', function( ) use ( $popup ) {
-					layerslider( $popup['id'], '', array( 'popup' => true ) );
-				});
 			}
 		}
 	}
 
 
+	public static function render( $popup ) {
+
+		if( ! empty(self::$popups) && is_array(self::$popups) ) {
+			foreach( self::$popups as $popup ) {
+				layerslider( $popup['id'], '', array( 'popup' => true ) );
+			}
+
+		}
+	}
 
 }

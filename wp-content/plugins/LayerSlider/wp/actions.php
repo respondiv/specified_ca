@@ -42,6 +42,13 @@ function ls_register_form_actions() {
 			}
 		}
 
+		// Export as HTML
+		if(isset($_GET['page']) && $_GET['page'] == 'layerslider' && isset($_GET['action']) && $_GET['action'] == 'export-html') {
+			if( check_admin_referer('export-sliders') ) {
+				ls_export_as_html( (int) $_GET['id'] );
+			}
+		}
+
 		// Empty caches
 		if(isset($_GET['page']) && $_GET['page'] == 'layerslider' && isset($_GET['action']) && $_GET['action'] == 'empty_caches') {
 			if(check_admin_referer('empty_caches')) {
@@ -58,10 +65,10 @@ function ls_register_form_actions() {
 		}
 
 		// Database Update
-		if(isset($_GET['page']) && $_GET['page'] == 'ls-system-status' && isset($_GET['action']) && $_GET['action'] == 'database_update') {
+		if( isset( $_GET['page']) && $_GET['page'] == 'layerslider-options' && isset($_GET['action']) && $_GET['action'] == 'database_update') {
 			if(check_admin_referer('database_update')) {
 				layerslider_create_db_table();
-				wp_redirect('admin.php?page=ls-system-status&message=dbUpdateSuccess');
+				wp_redirect('admin.php?page=layerslider-options&section=system-status&message=dbUpdateSuccess');
 			}
 		}
 
@@ -170,7 +177,7 @@ function ls_register_form_actions() {
 
 		if(isset($_GET['page']) && $_GET['page'] == 'layerslider' && isset($_GET['action']) && $_GET['action'] == 'hide-support-notice') {
 			if(check_admin_referer('hide-support-notice')) {
-				update_option('ls-show-support-notice', 0);
+				update_user_meta( get_current_user_id(), 'ls-show-support-notice-timestamp', time() );
 				header('Location: admin.php?page=layerslider');
 				die();
 			}
@@ -209,7 +216,9 @@ function ls_register_form_actions() {
 		add_action('wp_ajax_ls_parse_date', 'ls_parse_date');
 		add_action('wp_ajax_ls_save_screen_options', 'ls_save_screen_options');
 		add_action('wp_ajax_ls_get_mce_sliders', 'ls_get_mce_sliders');
+		add_action('wp_ajax_ls_get_mce_slides', 'ls_get_mce_slides');
 		add_action('wp_ajax_ls_get_post_details', 'ls_get_post_details');
+		add_action('wp_ajax_ls_get_search_posts', 'ls_get_search_posts');
 		add_action('wp_ajax_ls_get_taxonomies', 'ls_get_taxonomies');
 		add_action('wp_ajax_ls_upload_from_url', 'ls_upload_from_url');
 		add_action('wp_ajax_ls_store_opened', 'ls_store_opened');
@@ -231,8 +240,8 @@ function layerslider_delete_caches() {
 			WHERE option_name LIKE '_transient_ls-slider-data-%'
 			ORDER BY option_id DESC LIMIT 100";
 
-	if($transients = $wpdb->get_results($sql)) {
-		foreach ($transients as $key => $value) {
+	if( $transients = $wpdb->get_results($sql) ) {
+		foreach( $transients as $key => $value ) {
 			$key = str_replace('_transient_', '', $value->option_name);
 			delete_transient($key);
 		}
@@ -241,7 +250,8 @@ function layerslider_delete_caches() {
 
 function layerslider_empty_caches() {
 	layerslider_delete_caches();
-	wp_redirect('admin.php?page=layerslider&message=cacheEmpty');
+	wp_redirect( admin_url('admin.php?page=layerslider-options&message=cacheEmpty') );
+	die();
 }
 
 
@@ -349,7 +359,7 @@ function ls_save_google_fonts() {
 
 	// Save & redirect back
 	update_option('ls-google-fonts', $fonts);
-	header('Location: admin.php?page=layerslider&message=googleFontsUpdated');
+	wp_redirect( admin_url('admin.php?page=layerslider-options&message=googleFontsUpdated') );
 	die();
 }
 
@@ -361,9 +371,12 @@ function ls_save_advanced_settings() {
 		'include_at_footer',
 		'conditional_script_loading',
 		'concatenate_output',
+		'load_all_js_files',
 		'use_custom_jquery',
 		'put_js_to_body',
-		'gsap_sandboxing'
+		'gsap_sandboxing',
+		'defer_scripts',
+		'rocketscript_ignore'
 	);
 
 	foreach($options as $item) {
@@ -372,7 +385,7 @@ function ls_save_advanced_settings() {
 
 	update_option('ls_scripts_priority', (int)$_POST['scripts_priority']);
 
-	header('Location: admin.php?page=layerslider&message=generalUpdated');
+	wp_redirect( admin_url('admin.php?page=layerslider-options&message=generalUpdated') );
 	die();
 }
 
@@ -389,14 +402,111 @@ function ls_save_screen_options() {
 
 function ls_get_mce_sliders() {
 
-	$sliders = LS_Sliders::find(array('limit' => 50));
+	$sliders = LS_Sliders::find( array( 'limit' => 100 ) );
 	foreach($sliders as $key => $item) {
 		$sliders[$key]['preview'] = apply_filters('ls_preview_for_slider', $item );
-		$sliders[$key]['name'] = ! empty($item['name']) ? htmlspecialchars($item['name']) : 'Unnamed';
+		$sliders[$key]['name'] = ! empty($item['name']) ? htmlspecialchars(stripslashes($item['name'])) : 'Unnamed';
 	}
 
-	die(json_encode($sliders));
+	die( json_encode( $sliders ) );
 }
+
+
+function ls_get_mce_slides() {
+
+	$sliderID = (int) $_GET['sliderID'];
+
+	$slider = LS_Sliders::find( $sliderID );
+	$slider = $slider['data'];
+	$slides = array();
+
+	// Slides
+	foreach($slider['layers'] as $slideKey => $slide ) {
+
+		// Add untouched slide data
+		$slides[ $slideKey ] = $slide;
+
+
+		if( ! empty( $slide['properties']['backgroundId'] ) ) {
+			$slides[ $slideKey ]['properties'][ 'background' ] = apply_filters('ls_get_image', $slide['properties']['backgroundId'], $slide['properties']['background']);
+			$slides[ $slideKey ]['properties'][ 'backgroundThumb' ] = apply_filters('ls_get_image', $slide['properties']['backgroundId'], $slide['properties']['background']);
+		}
+
+		if( ! empty( $slide['properties']['thumbnailId'] ) ) {
+			$slides[ $slideKey ]['properties'][ 'thumbnail' ] = apply_filters('ls_get_image', $slide['properties']['thumbnailId'], $slide['properties']['thumbnail']);
+			$slides[ $slideKey ]['properties'][ 'thumbnailThumb' ] = apply_filters('ls_get_image', $slide['properties']['thumbnailId'], $slide['properties']['thumbnail']);
+		}
+
+		$slides[ $slideKey ]['properties']['title'] = ! empty( $slide['properties']['title'] ) ? stripslashes( $slide['properties']['title'] ) : 'Slide #'.($slideKey+1);
+
+		// Layers
+		foreach( $slide['sublayers'] as $layerKey => $layer ) {
+
+			// Ensure that magic quotes will not mess with JSON data
+			if( function_exists('get_magic_quotes_gpc') && get_magic_quotes_gpc() ) {
+				$layer['styles'] 		= stripslashes( $layer['styles'] );
+				$layer['transition'] 	= stripslashes( $layer['transition'] );
+			}
+
+			// Parse embedded JSON data
+			$layer['styles'] 		= !empty( $layer['styles'] ) ? (object) json_decode(stripslashes($layer['styles']), true) : new stdClass;
+			$layer['transition'] 	= !empty( $layer['transition'] ) ? (object) json_decode(stripslashes($layer['transition']), true) : new stdClass;
+			$layer['html'] 			= !empty( $layer['html'] ) ? stripslashes($layer['html']) : '';
+
+			// Add 'top', 'left' and 'wordwrap' to the styles object
+			if(isset($layer['top'])) { $layer['styles']->top = $layer['top']; unset($layer['top']); }
+			if(isset($layer['left'])) { $layer['styles']->left = $layer['left']; unset($layer['left']); }
+			if(isset($layer['wordwrap'])) { $layer['styles']->wordwrap = $layer['wordwrap']; unset($layer['wordwrap']); }
+
+			if( ! empty( $layer['transition']->showuntil ) ) {
+
+				$layer['transition']->startatout = 'transitioninend + '.$layer['transition']->showuntil;
+				$layer['transition']->startatouttiming = 'transitioninend';
+				$layer['transition']->startatoutvalue = $layer['transition']->showuntil;
+				unset($layer['transition']->showuntil);
+			}
+
+			if( ! empty( $layer['transition']->parallaxlevel ) ) {
+				$layer['transition']->parallax = true;
+			}
+
+			// Custom attributes
+			$layer['innerAttributes'] = !empty($layer['innerAttributes']) ?  (object) $layer['innerAttributes'] : new stdClass;
+			$layer['outerAttributes'] = !empty($layer['outerAttributes']) ?  (object) $layer['outerAttributes'] : new stdClass;
+
+
+			// v6.5.6: Convert old checkbox media settings to the new
+			// select based options.
+			if( isset( $layer['transition']->controls ) ) {
+				if( true === $layer['transition']->controls ) {
+					$layer['transition']->controls = 'auto';
+				} elseif( false === $layer['transition']->controls ) {
+					$layer['transition']->controls = 'disabled';
+				}
+			}
+
+			$slides[ $slideKey ]['sublayers'][ $layerKey ] = $layer;
+
+			if( ! empty( $layer['imageId'] ) ) {
+				$slides[ $slideKey ]['sublayers'][ $layerKey ][ 'image' ] = apply_filters('ls_get_image', $layer['imageId'], $layer['image']);
+				$slides[ $slideKey ]['sublayers'][ $layerKey ][ 'imageThumb' ] = apply_filters('ls_get_image', $layer['imageId'], $layer['image']);
+			}
+
+			if( ! empty( $layer['posterId'] ) ) {
+				$slides[ $slideKey ]['sublayers'][ $layerKey ][ 'poster' ] = apply_filters('ls_get_image', $layer['posterId'], $layer['poster']);
+				$slides[ $slideKey ]['sublayers'][ $layerKey ][ 'posterThumb' ] = apply_filters('ls_get_image', $layer['posterId'], $layer['poster']);
+			}
+
+			$slides[ $slideKey ]['sublayers'][ $layerKey ]['subtitle'] = ! empty( $layer['subtitle'] ) ? substr( stripslashes( $layer['subtitle'] ), 0, 32) : 'Layer #'.($layerKey+1);
+		}
+
+		$slides[ $slideKey ][ 'sublayers' ] = array_reverse( $slides[ $slideKey ][ 'sublayers' ] );
+	}
+
+	die( json_encode( $slides ) );
+}
+
+
 
 function ls_save_slider() {
 
@@ -524,7 +634,7 @@ function ls_save_revisions_options() {
 		LS_Revisions::truncate();
 	}
 
-	wp_redirect( admin_url('admin.php?page=ls-revisions') );
+	wp_redirect( admin_url('admin.php?page=layerslider-addons') );
 }
 
 
@@ -537,7 +647,11 @@ function ls_revert_slider( ) {
 	// Security check
 	check_admin_referer('ls-revert-slider-'.$sliderId);
 
+	// Revert back to revision
 	LS_Revisions::revert( $sliderId, $revisionId );
+
+	// Delete transient cache
+	delete_transient( 'ls-slider-data-'.$sliderId );
 
 	wp_redirect( admin_url('admin.php?page=layerslider&action=edit&id='.$sliderId) );
 	die();
@@ -693,7 +807,7 @@ function ls_import_online() {
 	if( ! $zip ) {
 		die(json_encode(array(
 			'success' => false,
-			'message' => __('LayerSlider couldn’t download your selected slider. Please check LayerSlider -> System Status for potential issues. The WP Remote functions may be unavailable or your web hosting provider has to allow external connections to our domain.', 'LayerSlider')
+			'message' => __('LayerSlider couldn’t download your selected slider. Please check LayerSlider -> Settings -> System Status for potential issues. The WP Remote functions may be unavailable or your web hosting provider has to allow external connections to our domain.', 'LayerSlider')
 		)));
 	}
 
@@ -730,7 +844,7 @@ function ls_import_online() {
 	if( ! file_put_contents($downloadPath, $zip) ) {
 		die(json_encode(array(
 			'success' => false,
-			'message' => __('LayerSlider couldn’t save the downloaded slider on your server. Please check LayerSlider -> System Status for potential issues. The most common reason for this issue is the lack of write permission on the /wp-content/uploads/ directory.', 'LayerSlider')
+			'message' => __('LayerSlider couldn’t save the downloaded slider on your server. Please check LayerSlider -> Settings -> System Status for potential issues. The most common reason for this issue is the lack of write permission on the /wp-content/uploads/ directory.', 'LayerSlider')
 		)));
 	}
 
@@ -766,12 +880,12 @@ function ls_save_access_permissions() {
 	$capability = ($_POST['custom_role'] == 'custom') ? $_POST['custom_capability'] : $_POST['custom_role'];
 
 	// Test value
-	if(empty($capability) || !current_user_can($capability)) {
-		header('Location: admin.php?page=layerslider&error=1&message=permissionError');
+	if( empty( $capability ) || ! current_user_can( $capability ) ) {
+		wp_redirect( admin_url('admin.php?page=layerslider-options&error=1&message=permissionError') );
 		die();
 	} else {
 		update_option('layerslider_custom_capability', $capability);
-		header('Location: admin.php?page=layerslider&message=permissionSuccess');
+		wp_redirect( admin_url('admin.php?page=layerslider-options&message=permissionSuccess') );
 		die();
 	}
 }
@@ -886,9 +1000,9 @@ function ls_save_user_css() {
 	$file = $upload_dir['basedir'].'/layerslider.custom.css';
 
 	// Attempt to save changes
-	if(is_writable($upload_dir['basedir'])) {
-		file_put_contents($file, stripslashes($_POST['contents']));
-		header('Location: admin.php?page=ls-style-editor&edited=1');
+	if( is_writable( $upload_dir['basedir'] ) ) {
+		file_put_contents( $file, stripslashes( $_POST['contents'] ) );
+		wp_redirect( admin_url( 'admin.php?page=layerslider-options&section=css-editor&edited=1' ) );
 		die();
 
 	// File isn't writable
@@ -906,21 +1020,21 @@ function ls_save_user_css() {
 function ls_save_user_skin() {
 
 	// Error checking
-	if(empty($_POST['skin']) || strpos($_POST['skin'], '..') !== false) {
-		wp_die(__('It looks like you haven’t selected any skin to edit.', 'LayerSlider'), __('No skin selected.', 'LayerSlider'), array('back_link' => true) );
+	if( empty( $_POST['skin'] ) || strpos( $_POST['skin'], '..' ) !== false ) {
+		wp_die( __('It looks like you haven’t selected any skin to edit.', 'LayerSlider'), __('No skin selected.', 'LayerSlider'), array('back_link' => true) );
 	}
 
 	// Get skin file and contents
-	$skin = LS_Sources::getSkin($_POST['skin']);
+	$skin = LS_Sources::getSkin( $_POST['skin'] );
 	$file = $skin['file'];
 
 	// Attempt to write the file
-	if(is_writable($file)) {
-		file_put_contents($file, stripslashes($_POST['contents']));
-		header('Location: admin.php?page=ls-skin-editor&skin='.$skin['handle'].'&edited=1');
+	if( is_writable( $file ) ) {
+		file_put_contents( $file, stripslashes( $_POST['contents'] ) );
+		wp_redirect( admin_url( 'admin.php?page=layerslider-options&section=skin-editor&edited=1&skin='.$skin['handle'] ) );
 		die();
 	} else {
-		wp_die(__('It looks like your files isn’t writable, so PHP couldn’t make any changes (CHMOD).', 'LayerSlider'), __('Cannot write to file', 'LayerSlider'), array('back_link' => true) );
+		wp_die( __('It looks like your files isn’t writable, so PHP couldn’t make any changes (CHMOD).', 'LayerSlider'), __('Cannot write to file', 'LayerSlider'), array('back_link' => true) );
 	}
 }
 
@@ -948,7 +1062,8 @@ function ls_get_post_details() {
 		'post_status' => 'publish',
 		'limit' => 100,
 		'posts_per_page' => 100,
-		'post_type' => $params['post_type']
+		'post_type' => $params['post_type'],
+		'suppress_filters' => false
 	);
 
 	if(!empty($params['post_orderby'])) {
@@ -974,6 +1089,63 @@ function ls_get_post_details() {
 	$posts = LS_Posts::find($queryArgs)->getParsedObject();
 
 	die(json_encode($posts));
+}
+
+
+function ls_get_search_posts() {
+
+	$filters = array(
+		'posts_per_page' 	=> 50,
+		'post_status' 		=> 'any',
+		'post_type' 		=> 'post'
+	);
+
+	if( ! empty( $_GET['s'] ) ) {
+		$filters['s'] = $_GET['s'];
+	}
+
+	if( ! empty( $_GET['post_type'] ) ) {
+		$types = array( 'post', 'page', 'attachment' );
+		if( in_array( $_GET['post_type'], $types ) ) {
+			$filters['post_type'] = $_GET['post_type'];
+		}
+	}
+
+	$query = new WP_Query( $filters );
+
+	if( ! empty( $query->posts ) ) {
+		$ret = array();
+		foreach ( $query->posts as $key => $val ) {
+
+			if( $val->post_type === 'attachment' ) {
+				$imageURL = wp_get_attachment_url( $val->ID );
+			} elseif( function_exists('get_post_thumbnail_id') && function_exists('wp_get_attachment_url') ) {
+				$imageURL = wp_get_attachment_url(get_post_thumbnail_id( $val->ID ));
+			}
+
+			if( ! $imageURL ) {
+				$imageURL = LS_ROOT_URL . '/static/admin/img/blank.gif';
+			}
+
+			$ret[] = array(
+				'author' 	=> get_userdata($val->post_author)->user_nicename,
+				'content' 	=> htmlentities( $val->post_content ),
+				'image-url' => $imageURL,
+				'post-id' 	=> $val->ID,
+				'post-slug' => $val->post_name,
+				'post-url' 	=> get_permalink( $val->ID ),
+				'post-type' => $val->post_type,
+				'title' 	=> htmlentities( $val->post_title ),
+				'date-published' => date( get_option('date_format'), strtotime($val->post_date) ),
+				'date-modified' => date( get_option('date_format'), strtotime($val->post_modified) )
+			);
+		}
+
+		die( json_encode( $ret ) );
+	}
+
+	die('[]');
+
 }
 
 
@@ -1062,6 +1234,7 @@ function ls_do_erase_plugin_data() {
 		'ls-share-displayed',
 		'ls-last-update-notification',
 		'ls-show-support-notice',
+		'ls-show-support-notice-timestamp',
 		'ls-show-canceled_activation_notice',
 		'layerslider_cancellation_update_info',
 		'layerslider-release-channel',
@@ -1070,6 +1243,7 @@ function ls_do_erase_plugin_data() {
 		'ls-latest-version',
 		'ls-store-data',
 		'ls-store-last-updated',
+		'ls-p-url',
 
 		// Revisions
 		'ls-revisions-enabled',
@@ -1273,4 +1447,183 @@ function layerslider_register_wpml_strings( $sliderID, $data ) {
 			}
 		}
 	}
+}
+
+
+function ls_export_as_html( $sliderID ) {
+
+	// Check ZipArchive
+	if( ! class_exists('ZipArchive') ) {
+		wp_die( __('The PHP ZipArchive extension is required to export sliders.', 'LayerSlider') );
+	}
+
+	if( ! get_option('layerslider-authorized-site', false) ) {
+		wp_die( __('Product activation is required in order to use this feature.', 'LayerSlider') );
+	}
+
+	// Get dindent
+	include LS_ROOT_PATH.'/static/dindent/Indenter.php';
+	$indenter = new \Gajus\Dindent\Indenter( array(
+		'indentation_character' => "\t"
+	));
+
+	include LS_ROOT_PATH.'/classes/class.ls.exportutil.php';
+	$zip = new LS_ExportUtil;
+
+	// Fetch slider data
+	$slider = LS_Sliders::find( $sliderID );
+
+	// Override some slider settings
+	$slider['data']['properties']['useSrcset'] = false;
+
+	// Use alternate image URLs
+	add_filter('wp_get_attachment_image_attributes', function( $attrs ) {
+		$attrs['src'] = 'images/'.basename($attrs['src']);
+		return $attrs;
+	});
+
+	// Use alternate image URLs in the init code
+	add_filter('layerslider_init_props_image', function( $src ) {
+		return 'images/'.basename( $src );
+	});
+
+	add_filter('layerslider_skin_url', function( $url, $skin ) {
+		return '../../layerslider/skins/'.$skin;
+	}, 10, 2);
+
+	add_filter('layerslider_attr_list', function( $attrs ) {
+		return implode(' ', $attrs);
+	});
+
+	add_filter( 'layerslider_init_props_separator', function( $value ) {
+		return "[[LN]]";
+	});
+
+	// Generate the markup
+	$parts 		= LS_Shortcode::generateSliderMarkup( $slider );
+	$template 	= file_get_contents( LS_ROOT_PATH.'/templates/html-export/template.html' );
+
+	// Replace slider ID
+	$parts['container'] = str_replace('layerslider_'.$sliderID.'' , 'slider', $parts['container'] );
+
+	// Format the markup with perfect indentations to elimiate the
+	// effect of concatenation.
+	$markup = $indenter->indent( $parts['container'].$parts['markup'] );
+
+	// Add an extra tab for the formatted markup, so it matches
+	// perfectly to the template structure.
+	$markup = str_replace("\n", "\r\n\t", $markup);
+
+	// Add extra line breaks between slides
+	$markup = str_replace('<div class="ls-slide"', "\r\n\t\t".'<div class="ls-slide"', $markup);
+
+	// Capture slider settings from the init code
+	preg_match('/.layerSlider\({(.*?)}/', $parts['init'], $matches);
+
+	// Format slider properties for use in the init code
+	$init = implode(",\r\n\t\t\t\t", explode('[[LN]]', $matches[1]) );
+
+	// Google Fonts
+	$googleFonts = '';
+	$fonts = $zip->fontsForSlider( $slider['data'] );
+	if( ! empty( $fonts ) ) {
+
+		foreach( $fonts as $font ) {
+			$googleFont[] = htmlspecialchars( $font['param'] );
+		}
+
+		$fontFamily = implode('|', $googleFont );
+		$googleFonts = "\r\n\t<!-- Google Fonts -->\r\n\t".'<link rel="stylesheet" href="https://fonts.googleapis.com/css?family='.$fontFamily.'">'."\r\n\t";
+
+	}
+
+	// Icon Fonts
+	$iconFonts = '';
+	if( ! empty( $parts['fonts'] ) ) {
+		$tmp = array("\r\n\t<!-- Icon Fonts -->");
+		foreach( $parts['fonts'] as $font ) {
+
+			// FontAwesome
+			if( $font === 'font-awesome' ) {
+
+				$tmp[] = '<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">'."\r\n\t";
+			}
+		}
+
+		$iconFonts = implode("\r\n\t", $tmp);
+	}
+
+
+	// LayerSlider plugin files
+	$pluginFiles = '';
+	if( ! empty( $parts['plugins'] ) ) {
+
+		$tmp = array("\r\n\t<!-- LayerSlider plugin files -->");
+		foreach( $parts['plugins'] as $plugin ) {
+			$tmp[] = '<link rel="stylesheet" href="../../layerslider/plugins/'.$plugin.'/layerslider.'.$plugin.'.css">';
+			$tmp[] = '<script src="../../layerslider/plugins/'.$plugin.'/layerslider.'.$plugin.'.js"></script>'."\r\n\t";
+		}
+
+		$pluginFiles = implode("\r\n\t", $tmp);
+	}
+
+	// LayerSlider API
+	$sliderAPI = '';
+	if( ! empty( $slider['data']['callbacks'] ) && is_array( $slider['data']['callbacks'] ) ) {
+		$apiPart[] = '$("#slider")';
+		foreach( $slider['data']['callbacks'] as $event => $function) {
+			$function = substr($function, 0, -1 ) . "\r\n}";
+			$function = preg_replace( '/^/m', "\t\t\t", stripslashes( $function ) );
+			$function = ltrim( $function );
+			$apiPart[] .= '.on(\''.$event.'\', '.$function.')';
+		}
+
+		$sliderAPI = implode('', $apiPart).";\r\n\r\n";
+	}
+
+	// Replace placeholders
+	$template = str_replace( '{{slider-title}}', $slider['name'], $template );
+	$template = str_replace( '{{google-fonts}}', $googleFonts, $template );
+	$template = str_replace( '{{icon-fonts}}', $iconFonts, $template );
+	$template = str_replace( '{{layerslider-plugins}}', $pluginFiles, $template );
+	$template = str_replace( '{{slider-markup}}', $markup, $template );
+	$template = str_replace( '{{slider-api}}', $sliderAPI, $template);
+	$template = str_replace( '{{slider-props}}', $init, $template );
+
+
+	// Add extra line breaks between slides
+	$template = str_replace( '<div class="ls-slide"', "\r\n\t\t".'<div class="ls-slide"', $template );
+
+	// Add explanation comment before slides
+	$count = 1;
+	$template = preg_replace_callback('/<div class\=\"ls-slide\"/', function( $matches ) use (&$count) {
+		return "<!-- Slide ".$count++."-->\r\n\t\t".'<div class="ls-slide"';
+	}, $template);
+
+	// Remove 'fitvidsignore'
+	$template = str_replace( ' class="ls-wp-container fitvidsignore"', '', $template );
+
+
+	// Build ZIP
+
+		// Add slider folder
+		$name = empty( $slider['name'] ) ? 'slider_' . $slider['id'] : $slider['name'];
+		$name = sanitize_file_name( $name );
+
+		// Add images
+		$images = $zip->getImagesForSlider( $slider['data'] );
+		$images = $zip->getFSPaths( $images );
+		$zip->addImage( $images, $name, 'images' );
+
+		// Add slider HTML file
+		$zip->addFileFromString( "$name/slider.html", $template);
+
+		// Add instructions
+		$zip->addFile( LS_ROOT_PATH.'/templates/html-export/INSTRUCTIONS.html', "$name/" );
+		$zip->addImage( LS_ROOT_PATH.'/templates/html-export/ls-instructions.png', "$name", 'images');
+
+
+
+		$zip->download( 'LayerSlider HTML - '.$name.' '.date('Y-m-d').' at '.date('H.i.s').'.zip');
+	die();
 }
